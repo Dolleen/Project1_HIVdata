@@ -1,0 +1,186 @@
+---
+title: "PMTCT variables and their associations in HIV study"
+author: "Dolleen Osundwa"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+The data collected is based on a research study that is aimed to follow up on HIV positive mothers for a duration of time (ante-natal and six months post-natal) monitoring their viral load, adherence to clinic visitations and their consistent uptake of ARV drugs. 
+This analysis is aimed at having an overview of the relationship between some indicators that were focused on during the study.
+
+```{r required_packages, echo=FALSE,comment=""}
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library(skimr))
+suppressPackageStartupMessages(library(plotly))
+library(plotly)
+library(gganimate)
+library(gifski)
+library(readxl)
+library(forcats)
+library(ggplot2)
+```
+
+##Load Packages
+
+The following R packages are useful for this analysis:
+
+<ol>
+<li> `readxl`
+<li> `tidyverse`
+<li> `skimr`
+<li> `forcats`
+<li> `ggplot2`
+<li> `gganimate`
+<li> `gifski`
+<li> `plotly`
+</ol>
+
+## Load data files
+
+
+```{r read_file,comment=""}
+hiv <- read_xlsx("AmbiraFacilityData_HIV .xlsx",col_names = TRUE, na = "NA")
+
+str(hiv)
+names(hiv)
+dim(hiv)
+```
+
+## Data Wrangling
+The column names should be changed for easier analysis. Most of the columns' class are not in the proper form. The last column will also be removed since it has no use.
+
+## Format the names of the columns
+
+```{r mnames, comment = ""}
+
+#Format the column names
+new_names = c("consent", "pid", "entered_date", "age", "ccc_num", "art_regimen", "disclosure_status", "marital_status", "planned_pregnancy", "family_planning", "lmp", "edd", "delivery_date", "delivery_outcome", "baseline_vl", "postpartum_vl", "infant_num", "birth_weight", "infant_sex", "six_week_pcr", "six_month_pcr", "infant_art", "adverse_event", "study_status", "last")
+
+hiv <- hiv %>% set_names(new_names)
+```
+
+## Drop the last column
+```{r rm_col, comment=""}
+## Remove the last column
+hiv <- hiv %>% select(-last)
+
+dim(hiv)
+
+#View details
+skimr::skim(hiv)
+```
+##Missing Values
+Observe the level of missing values. Remove all missing values if the level is low.
+
+```{r missingness, comment = ""}
+
+#Compute missing values
+sum(is.na(hiv))
+
+#Available values
+sum(!is.na(hiv))
+
+#Total values
+dim(hiv)
+d1 <- dim(hiv)[1]
+d2 <- dim(hiv)[2]
+d1*d2
+
+#Total values (another approach)
+sum(sum(is.na(hiv)),sum(!is.na(hiv)))
+
+#Proportion of missing values
+mean(is.na(hiv))
+```
+##Change the class of columns
+
+Some of the columns need type casting
+
+```{r change_cols, comment = ""}
+
+#Change the columns from character to factor
+hiv$art_regimen <- factor(hiv$art_regimen)
+hiv$disclosure_status <- factor(hiv$disclosure_status)
+hiv$marital_status <- factor(hiv$marital_status)
+hiv$planned_pregnancy <- factor(hiv$planned_pregnancy)
+hiv$family_planning <- factor(hiv$family_planning)
+hiv$delivery_outcome <- factor(hiv$delivery_outcome)
+```
+
+## Wrangling
+
+```{r clean, comment = ""}
+
+#Observe unique values for delivery outcome 
+unique(hiv$delivery_outcome)
+
+#Count values
+hiv %>% select(delivery_outcome) %>% count(delivery_outcome)
+
+#Change the necessary values
+hiv <- hiv %>% mutate(deliveryOutcome2 = recode(hiv$delivery_outcome, "LIVE BIRTHS" = "LIVE BIRTH","TWINS" = "LIVE BIRTH"))
+
+#Verify
+hiv %>% select(deliveryOutcome2) %>% count(deliveryOutcome2)
+
+#Unique values for infant sex
+unique(hiv$infant_sex)
+
+#Count
+hiv %>% select(infant_sex) %>% count(infant_sex)
+
+#Replace values
+hiv <- hiv %>% mutate(infantSex2 = recode(hiv$infant_sex,"FEMALE        MALE" = "FEMALE","MALE             MALE" = "MALE"))
+
+#Verify
+hiv %>% select(infantSex2) %>% count(infantSex2)
+
+#Pregnancy
+unique(hiv$planned_pregnancy)
+
+#Replace values
+hiv <- hiv %>% mutate(planPreg = recode(hiv$planned_pregnancy, "YES                      YES" = "YES"))
+
+```
+##visualization
+
+```{r viz, comment = ""}
+
+#Check the range of the age to determine bins range 
+(hiv$age);mean(hiv$age)
+
+#Distribution of age with marital status
+age_hist <- ggplot(hiv, aes(age, fill = marital_status)) + geom_histogram()
+
+ageh <- ggplotly(age_hist)
+ageh
+
+#HIV status disclosure with marital status
+bars <- ggplot(hiv, aes(x = disclosure_status, fill = marital_status)) + geom_bar() + transition_states(marital_status)
+
+bars2 <-  bars + enter_fade() + exit_fade()
+bars2
+
+#Disclosure, age and marital status
+bp <-  ggplot(hiv, aes(x = disclosure_status, y = age, fill = marital_status)) + geom_boxplot() + transition_states(marital_status)
+bp
+
+#Subset the column for conraception
+fp2 <- hiv %>% select(family_planning) %>% count(family_planning)
+
+#Pictorial count of family planning
+contraceptives <- ggplot(fp2, aes(family_planning, n, fill = family_planning)) + geom_col() + geom_text(aes(label = n, vjust = -0.5)) + theme_minimal() + theme(legend.position = "none", axis.title.y = element_text(angle = 0)) + labs(title = "Histogram pf Types of Contraceptives")
+contraceptives
+
+#Family planning and pregnancy
+pp <- ggplot(data = hiv, aes(x = planPreg, fill = family_planning)) + geom_bar(position = "dodge") +facet_wrap(~family_planning)
+ggplotly(pp)
+
+```
+
+The average age is 30 years and the median is 32. From the data, at the average age of 30 years all participants were already married.
